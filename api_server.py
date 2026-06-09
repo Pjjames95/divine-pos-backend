@@ -10,6 +10,7 @@ import uuid
 import bcrypt
 import json
 import base64
+import time
 import threading
 import requests
 from datetime import datetime, timedelta
@@ -150,18 +151,31 @@ class MpesaAPI:
             "AccountReference": (account_ref or "Payment")[:12], "TransactionDesc": description[:13]
         }
         
-        response = requests.post(f"{self.base_url}/mpesa/stkpush/v1/processrequest",
-            json=payload, headers={'Authorization': f'Bearer {token}'}, timeout=30)
-        result = response.json()
+        # Try up to 3 times with delays
+        for attempt in range(3):
+            try:
+                response = requests.post(
+                    f"{self.base_url}/mpesa/stkpush/v1/processrequest",
+                    json=payload,
+                    headers={'Authorization': f'Bearer {token}'},
+                    timeout=30
+                )
+                result = response.json()
+                return {
+                    'success': result.get('ResponseCode') == '0',
+                    'checkout_request_id': result.get('CheckoutRequestID'),
+                    'merchant_request_id': result.get('MerchantRequestID'),
+                    'response_code': result.get('ResponseCode'),
+                    'response_description': result.get('ResponseDescription'),
+                    'customer_message': result.get('CustomerMessage')
+                }
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(2)  # Wait 2 seconds before retry
+                    continue
+                return {'success': False, 'error': f'M-Pesa API error: {str(e)[:100]}'}
         
-        return {
-            'success': result.get('ResponseCode') == '0',
-            'checkout_request_id': result.get('CheckoutRequestID'),
-            'merchant_request_id': result.get('MerchantRequestID'),
-            'response_code': result.get('ResponseCode'),
-            'response_description': result.get('ResponseDescription'),
-            'customer_message': result.get('CustomerMessage')
-        }
+        return {'success': False, 'error': 'Failed after 3 attempts'}
     
     def query_status(self, checkout_request_id):
         token = self.get_access_token()

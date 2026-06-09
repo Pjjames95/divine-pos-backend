@@ -99,7 +99,7 @@ def init_db():
         cursor.execute("SELECT COUNT(*) FROM settings")
         if cursor.fetchone()[0] == 0:
             defaults = [
-                ('shop_name', 'Glamour Beauty Shop'),
+                ('shop_name', 'Divine Beauty & Cosmetics Shop'),
                 ('shop_address', 'Nairobi, Kenya'),
                 ('shop_phone', '0700000000'),
                 ('tax_rate', '16'),
@@ -234,14 +234,40 @@ def create_sale():
 
 @app.route('/api/sales', methods=['GET'])
 def get_sales():
-    date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
-    start = f"{date} 00:00:00"
-    end = f"{date} 23:59:59"
+    """Get all sales or filter by date"""
+    date = request.args.get('date', None)
     
-    sales = execute_query(
-        "SELECT * FROM sales WHERE created_at BETWEEN ? AND ? AND is_void=0 ORDER BY created_at DESC",
-        (start, end), fetch=True)
-    return jsonify(sales)
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DATABASE_PATH)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            if date:
+                start = f"{date} 00:00:00"
+                end = f"{date} 23:59:59"
+                cursor.execute(
+                    "SELECT * FROM sales WHERE created_at BETWEEN ? AND ? AND is_void=0 ORDER BY created_at DESC",
+                    (start, end)
+                )
+            else:
+                cursor.execute(
+                    "SELECT * FROM sales WHERE is_void=0 ORDER BY created_at DESC LIMIT 200"
+                )
+            
+            sales = []
+            for row in cursor.fetchall():
+                sale = dict(row)
+                # Get sale items
+                cursor.execute("SELECT * FROM sale_items WHERE sale_id=?", (sale['id'],))
+                items = [dict(item) for item in cursor.fetchall()]
+                sale['items'] = items
+                sales.append(sale)
+            
+            conn.close()
+            return jsonify(sales)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reports/daily', methods=['GET'])
 def daily_report():

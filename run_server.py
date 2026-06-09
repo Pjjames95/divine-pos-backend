@@ -8,7 +8,7 @@ from app import app
 if __name__ == '__main__':
     print("=" * 50)
     print("M-Pesa Callback Server Starting...")
-    print("Server: http://0.0.0.0:5000")
+    print("Server: https://divine-pos-backend.onrender.com")
     print("Threads: 8 (handles concurrent requests)")
     print("=" * 50)
     

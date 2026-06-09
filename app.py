@@ -216,7 +216,7 @@ class MpesaAPI:
                 "PartyA": phone_number,
                 "PartyB": MPESA_SHORTCODE,
                 "PhoneNumber": phone_number,
-                "CallBackURL": f"https://gtechlabs-ke.web.app/api/mpesa/callback",
+                "CallBackURL": f"https://divine-pos-backend.onrender.com/api/mpesa/callback",
                 "AccountReference": account_ref[:12] if account_ref else "BeautyShop",
                 "TransactionDesc": description[:13]
             }
@@ -576,5 +576,5 @@ if __name__ == '__main__':
     sock.close()
     
     print("Starting M-Pesa Callback Server...")
-    print("Server: http://0.0.0.0:5000")
+    print("Server: https://divine-pos-backend.onrender.com")
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)

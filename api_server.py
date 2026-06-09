@@ -349,6 +349,6 @@ init_db()
 if __name__ == '__main__':
     print("=" * 50)
     print("Beauty Shop POS - Central API Server")
-    print("Server: http://0.0.0.0:5000")
+    print("Server: https://divine-pos-backend.onrender.com")
     print("=" * 50)
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)

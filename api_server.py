@@ -474,6 +474,14 @@ def hard_delete_product(product_id):
     return jsonify({'success': True})
 
 
+@app.route('/api/sales/<sale_id>/hard-delete', methods=['DELETE'])
+def hard_delete_sale(sale_id):
+    """Permanently delete a sale and its items"""
+    execute_query("DELETE FROM sale_items WHERE sale_id=?", (sale_id,))
+    execute_query("DELETE FROM sales WHERE id=?", (sale_id,))
+    return jsonify({'success': True})
+
+
 @app.route('/api/products/<product_id>/delete', methods=['PUT'])
 def delete_product(product_id):
     """Soft delete a product"""

@@ -202,33 +202,33 @@ def init_db():
             )
 
         # ----- Seed Sample Products -----
-        cursor.execute("SELECT COUNT(*) FROM products")
-        if cursor.fetchone()[0] == 0:
-            products = [
-                ('Matte Lipstick - Ruby Red',  'MAC Cosmetics', '1001', 'Makeup',    2500, 1800,  50),
-                ('Hydrating Face Cream',        'Nivea',         '1002', 'Skincare',  1200,  800, 100),
-                ('Argan Oil Hair Treatment',    'Garnier',       '1003', 'Hair Care', 1800, 1200,  75),
-                ('Gel Nail Polish Set',         'NYX',           '1004', 'Nails',     3500, 2500,  30),
-                ('Rose Garden Perfume',         'Revlon',        '1005', 'Fragrances',4500, 3200,  40),
-                ('Shea Butter Body Lotion',     'Dove',          '1006', 'Bath & Body', 950,  650, 120),
-                ('Makeup Brush Set',            'Maybelline',    '1007', 'Tools',     2800, 2000,  25),
-                ('Vitamin C Serum',             'Olay',          '1008', 'Skincare',  3200, 2200,  45),
-            ]
-            for p in products:
-                cursor.execute(
-                    '''INSERT INTO products
-                       (id, name, brand, barcode, category, price, cost_price, quantity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                    (str(uuid.uuid4()), *p)
-                )
+        # cursor.execute("SELECT COUNT(*) FROM products")
+        # if cursor.fetchone()[0] == 0:
+        #     products = [
+        #         ('Matte Lipstick - Ruby Red',  'MAC Cosmetics', '1001', 'Makeup',    2500, 1800,  50),
+        #         ('Hydrating Face Cream',        'Nivea',         '1002', 'Skincare',  1200,  800, 100),
+        #         ('Argan Oil Hair Treatment',    'Garnier',       '1003', 'Hair Care', 1800, 1200,  75),
+        #         ('Gel Nail Polish Set',         'NYX',           '1004', 'Nails',     3500, 2500,  30),
+        #         ('Rose Garden Perfume',         'Revlon',        '1005', 'Fragrances',4500, 3200,  40),
+        #         ('Shea Butter Body Lotion',     'Dove',          '1006', 'Bath & Body', 950,  650, 120),
+        #         ('Makeup Brush Set',            'Maybelline',    '1007', 'Tools',     2800, 2000,  25),
+        #         ('Vitamin C Serum',             'Olay',          '1008', 'Skincare',  3200, 2200,  45),
+        #     ]
+        #     for p in products:
+        #         cursor.execute(
+        #             '''INSERT INTO products
+        #                (id, name, brand, barcode, category, price, cost_price, quantity)
+        #                VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+        #             (str(uuid.uuid4()), *p)
+        #         )
 
         # ----- Seed Default Settings -----
         cursor.execute("SELECT COUNT(*) FROM settings")
         if cursor.fetchone()[0] == 0:
             for k, v in [
                 ('shop_name',    'Divine Beauty & Cosmetics Shop'),
-                ('shop_address', 'Nairobi, Kenya'),
-                ('shop_phone',   '0700000000'),
+                ('shop_address', 'Embu, Kenya'),
+                ('shop_phone',   '0115508991'),
                 ('tax_rate',     '16'),
                 ('currency',     'KES'),
             ]:

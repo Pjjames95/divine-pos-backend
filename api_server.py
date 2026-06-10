@@ -460,33 +460,33 @@ def update_product(product_id):
 # ========== Sales Endpoints ==========
 @app.route('/api/sales', methods=['POST'])
 def create_sale():
-    data    = request.json
+    data = request.json
     sale_id = str(uuid.uuid4())
     receipt = f"GBS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-    execute_query(
-        '''INSERT INTO sales
-           (id, receipt_number, total_amount, payment_method, payment_status,
-            cash_tendered, change_amount, cashier_id, customer_phone)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (sale_id, receipt, data['total_amount'], data['payment_method'],
-         data.get('payment_status', 'completed'), data.get('cash_tendered'),
-         data.get('change_amount'), data.get('cashier_id'), data.get('customer_phone'))
-    )
-
+    
+    execute_query('''INSERT INTO sales (id, receipt_number, total_amount, payment_method, payment_status,
+        cash_tendered, change_amount, cashier_id, customer_phone)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        (sale_id, receipt, data['total_amount'], data['payment_method'], data.get('payment_status', 'completed'),
+         data.get('cash_tendered'), data.get('change_amount'), data.get('cashier_id'), data.get('customer_phone')))
+    
     for item in data.get('items', []):
-        execute_query(
-            '''INSERT INTO sale_items
-               (id, sale_id, product_id, product_name, quantity, unit_price, total_price)
-               VALUES (?, ?, ?, ?, ?, ?, ?)''',
-            (str(uuid.uuid4()), sale_id, item['product_id'], item['product_name'],
-             item['quantity'], item['unit_price'], item['total_price'])
-        )
-        execute_query(
-            "UPDATE products SET quantity=quantity-?, updated_at=? WHERE id=?",
-            (item['quantity'], datetime.now(), item['product_id'])
-        )
-
+        # Get product cost price from database
+        product = execute_query("SELECT cost_price FROM products WHERE id=?", (item['product_id'],), fetch=True)
+        cost_price = product[0]['cost_price'] if product and product[0].get('cost_price') else 0
+        
+        # Calculate profit
+        unit_profit = item['unit_price'] - cost_price
+        total_profit = unit_profit * item['quantity']
+        
+        execute_query('''INSERT INTO sale_items (id, sale_id, product_id, product_name, quantity, unit_price, cost_price, profit, total_price)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (str(uuid.uuid4()), sale_id, item['product_id'], item['product_name'], item['quantity'], 
+             item['unit_price'], cost_price, total_profit, item['total_price']))
+        
+        execute_query("UPDATE products SET quantity=quantity-?, updated_at=? WHERE id=?", 
+            (item['quantity'], datetime.now(), item['product_id']))
+    
     return jsonify({'success': True, 'sale_id': sale_id, 'receipt_number': receipt})
 
 

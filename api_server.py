@@ -454,15 +454,23 @@ def add_product():
 @app.route('/api/products/<product_id>', methods=['PUT'])
 def update_product(product_id):
     data = request.json
-    execute_query(
-        '''UPDATE products
-           SET name=?, brand=?, category=?, price=?, cost_price=?,
-               quantity=?, min_stock_level=?, updated_at=?
-           WHERE id=?''',
-        (data['name'], data.get('brand'), data.get('category'), data['price'],
-         data.get('cost_price', 0), data.get('quantity', 0),
-         data.get('min_stock_level', 5), datetime.now(), product_id)
-    )
+    # Handle is_active field for soft delete
+    if 'is_active' in data:
+        execute_query("UPDATE products SET is_active=?, updated_at=? WHERE id=?", 
+            (data['is_active'], datetime.now(), product_id))
+    else:
+        execute_query('''UPDATE products SET name=?, brand=?, category=?, price=?, cost_price=?,
+            quantity=?, min_stock_level=?, updated_at=? WHERE id=?''',
+            (data['name'], data.get('brand'), data.get('category'), data['price'],
+             data.get('cost_price', 0), data.get('quantity', 0),
+             data.get('min_stock_level', 5), datetime.now(), product_id))
+    return jsonify({'success': True})
+
+@app.route('/api/products/<product_id>/hard-delete', methods=['DELETE'])
+def hard_delete_product(product_id):
+    """Permanently delete a product"""
+    execute_query("DELETE FROM sale_items WHERE product_id=?", (product_id,))
+    execute_query("DELETE FROM products WHERE id=?", (product_id,))
     return jsonify({'success': True})
 
 

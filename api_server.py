@@ -139,6 +139,15 @@ def init_db():
             unit_price REAL,
             total_price REAL
         )''')
+        try:
+            cursor.execute("ALTER TABLE sale_items ADD COLUMN cost_price REAL DEFAULT 0")
+        except:
+            pass  # Column already exists
+
+        try:
+            cursor.execute("ALTER TABLE sale_items ADD COLUMN profit REAL DEFAULT 0")
+        except:
+            pass  # Column already exists
 
         cursor.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
@@ -457,6 +466,14 @@ def update_product(product_id):
     return jsonify({'success': True})
 
 
+@app.route('/api/products/<product_id>/delete', methods=['PUT'])
+def delete_product(product_id):
+    """Soft delete a product"""
+    execute_query("UPDATE products SET is_active=0, updated_at=? WHERE id=?", 
+        (datetime.now(), product_id))
+    return jsonify({'success': True})
+
+
 # ========== Sales Endpoints ==========
 @app.route('/api/sales', methods=['POST'])
 def create_sale():
@@ -471,18 +488,15 @@ def create_sale():
          data.get('cash_tendered'), data.get('change_amount'), data.get('cashier_id'), data.get('customer_phone')))
     
     for item in data.get('items', []):
-        # Get product cost price from database
+        # Get product cost price
         product = execute_query("SELECT cost_price FROM products WHERE id=?", (item['product_id'],), fetch=True)
-        cost_price = product[0]['cost_price'] if product and product[0].get('cost_price') else 0
+        cost_price = float(product[0]['cost_price'] or 0) if product else float(item.get('cost_price', 0) or 0)
         
-        # Calculate profit
-        unit_profit = item['unit_price'] - cost_price
-        total_profit = unit_profit * item['quantity']
-        
-        execute_query('''INSERT INTO sale_items (id, sale_id, product_id, product_name, quantity, unit_price, cost_price, profit, total_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (str(uuid.uuid4()), sale_id, item['product_id'], item['product_name'], item['quantity'], 
-             item['unit_price'], cost_price, total_profit, item['total_price']))
+        # Use simple insert without cost_price/profit columns
+        execute_query('''INSERT INTO sale_items (id, sale_id, product_id, product_name, quantity, unit_price, total_price)
+            VALUES (?, ?, ?, ?, ?, ?, ?)''',
+            (str(uuid.uuid4()), sale_id, item['product_id'], item['product_name'], 
+             item['quantity'], item['unit_price'], item['total_price']))
         
         execute_query("UPDATE products SET quantity=quantity-?, updated_at=? WHERE id=?", 
             (item['quantity'], datetime.now(), item['product_id']))

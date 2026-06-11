@@ -438,32 +438,29 @@ def get_products():
 
 @app.route('/api/products', methods=['POST'])
 def add_product():
-    data       = request.json
+    data = request.json
     product_id = str(uuid.uuid4())
-    execute_query(
-        '''INSERT INTO products
-           (id, name, brand, sku, barcode, category, price, cost_price, quantity, min_stock_level)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+    execute_query('''INSERT INTO products (id, name, brand, sku, barcode, category, 
+        retail_price, wholesale_price, cost_price, quantity, min_stock_level)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (product_id, data['name'], data.get('brand'), data.get('sku'), data.get('barcode'),
-         data.get('category'), data['price'], data.get('cost_price', 0),
-         data.get('quantity', 0), data.get('min_stock_level', 5))
-    )
+         data.get('category'), 
+         data.get('retail_price', data.get('price', 0)),  # Support old 'price' field
+         data.get('wholesale_price', data.get('retail_price', data.get('price', 0))),
+         data.get('cost_price', 0), data.get('quantity', 0), data.get('min_stock_level', 5)))
     return jsonify({'success': True, 'id': product_id})
-
 
 @app.route('/api/products/<product_id>', methods=['PUT'])
 def update_product(product_id):
     data = request.json
-    # Handle is_active field for soft delete
-    if 'is_active' in data:
-        execute_query("UPDATE products SET is_active=?, updated_at=? WHERE id=?", 
-            (data['is_active'], datetime.now(), product_id))
-    else:
-        execute_query('''UPDATE products SET name=?, brand=?, category=?, price=?, cost_price=?,
-            quantity=?, min_stock_level=?, updated_at=? WHERE id=?''',
-            (data['name'], data.get('brand'), data.get('category'), data['price'],
-             data.get('cost_price', 0), data.get('quantity', 0),
-             data.get('min_stock_level', 5), datetime.now(), product_id))
+    execute_query('''UPDATE products SET name=?, brand=?, category=?, 
+        retail_price=?, wholesale_price=?, cost_price=?, quantity=?, 
+        min_stock_level=?, updated_at=? WHERE id=?''',
+        (data['name'], data.get('brand'), data.get('category'),
+         data.get('retail_price', data.get('price', 0)),
+         data.get('wholesale_price', data.get('retail_price', data.get('price', 0))),
+         data.get('cost_price', 0), data.get('quantity', 0),
+         data.get('min_stock_level', 5), datetime.now(), product_id))
     return jsonify({'success': True})
 
 @app.route('/api/products/<product_id>/hard-delete', methods=['DELETE'])
@@ -497,23 +494,45 @@ def create_sale():
     sale_id = str(uuid.uuid4())
     receipt = f"GBS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     
-    execute_query('''INSERT INTO sales (id, receipt_number, total_amount, payment_method, payment_status,
-        cash_tendered, change_amount, cashier_id, customer_phone)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (sale_id, receipt, data['total_amount'], data['payment_method'], data.get('payment_status', 'completed'),
-         data.get('cash_tendered'), data.get('change_amount'), data.get('cashier_id'), data.get('customer_phone')))
+    payment_method = data.get('payment_method', 'cash')
+    payment_status = data.get('payment_status', 'completed')
     
+    # Handle credit sales
+    credit_status = None
+    credit_customer_name = None
+    credit_customer_phone = None
+    
+    if payment_method == 'credit':
+        payment_status = 'pending'
+        credit_status = 'unpaid'
+        credit_customer_name = data.get('credit_customer_name', '')
+        credit_customer_phone = data.get('credit_customer_phone', '')
+    
+    execute_query('''INSERT INTO sales (id, receipt_number, total_amount, payment_method, 
+        payment_status, sale_type, credit_status, credit_customer_name, credit_customer_phone,
+        cash_tendered, change_amount, cashier_id, customer_phone)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        (sale_id, receipt, data['total_amount'], payment_method, 
+         payment_status, data.get('sale_type', 'retail'),
+         credit_status, credit_customer_name, credit_customer_phone,
+         data.get('cash_tendered'), data.get('change_amount'), 
+         data.get('cashier_id'), data.get('customer_phone')))
+    
+    # Only reduce stock if not credit (or if you want to reduce for credit too)
     for item in data.get('items', []):
-        # Get product cost price
-        product = execute_query("SELECT cost_price FROM products WHERE id=?", (item['product_id'],), fetch=True)
-        cost_price = float(product[0]['cost_price'] or 0) if product else float(item.get('cost_price', 0) or 0)
+        product = execute_query("SELECT cost_price FROM products WHERE id=?", 
+            (item['product_id'],), fetch=True)
+        cost_price = float(product[0]['cost_price'] or 0) if product else 0
+        unit_profit = item['unit_price'] - cost_price
+        total_profit = unit_profit * item['quantity']
         
-        # Use simple insert without cost_price/profit columns
-        execute_query('''INSERT INTO sale_items (id, sale_id, product_id, product_name, quantity, unit_price, total_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?)''',
-            (str(uuid.uuid4()), sale_id, item['product_id'], item['product_name'], 
-             item['quantity'], item['unit_price'], item['total_price']))
+        execute_query('''INSERT INTO sale_items (id, sale_id, product_id, product_name, 
+            quantity, unit_price, total_price, profit)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            (str(uuid.uuid4()), sale_id, item['product_id'], item['product_name'],
+             item['quantity'], item['unit_price'], item['total_price'], total_profit))
         
+        # Reduce stock for credit sales too
         execute_query("UPDATE products SET quantity=quantity-?, updated_at=? WHERE id=?", 
             (item['quantity'], datetime.now(), item['product_id']))
     
@@ -541,6 +560,38 @@ def get_sales():
         return jsonify(sales_raw)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/sales/<sale_id>/pay-credit', methods=['POST'])
+def pay_credit(sale_id):
+    """Pay off a credit sale"""
+    data = request.json
+    payment_method = data.get('payment_method', 'cash')
+    amount = data.get('amount', 0)
+    
+    execute_query('''UPDATE sales SET 
+        payment_status='completed', 
+        credit_status='paid',
+        credit_paid_amount=?,
+        credit_paid_date=?,
+        payment_method=?,
+        cash_tendered=?,
+        change_amount=?
+        WHERE id=?''',
+        (amount, datetime.now(), payment_method, 
+         data.get('cash_tendered', amount),
+         data.get('change_amount', 0),
+         sale_id))
+    
+    return jsonify({'success': True})
+
+@app.route('/api/credits', methods=['GET'])
+def get_credits():
+    """Get all unpaid credit sales"""
+    credits = execute_query(
+        "SELECT * FROM sales WHERE payment_method='credit' AND credit_status='unpaid' AND is_void=0 ORDER BY created_at DESC",
+        fetch=True
+    )
+    return jsonify(credits)
 
 
 @app.route('/api/reports/daily', methods=['GET'])
@@ -588,6 +639,11 @@ def change_password(user_id):
     execute_query("UPDATE users SET password_hash=? WHERE id=?", (pw, user_id))
     return jsonify({'success': True})
 
+@app.route('/api/users/<user_id>/hard-delete', methods=['DELETE'])
+def hard_delete_user(user_id):
+    """Permanently delete a user"""
+    execute_query("DELETE FROM users WHERE id=?", (user_id,))
+    return jsonify({'success': True})
 
 # ========== Settings Endpoints ==========
 @app.route('/api/settings', methods=['GET'])

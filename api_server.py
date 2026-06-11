@@ -105,7 +105,8 @@ def init_db():
             sku TEXT UNIQUE,
             barcode TEXT,
             category TEXT,
-            price REAL,
+            retail_price REAL,
+            wholesale_price REAL,
             cost_price REAL,
             quantity INTEGER DEFAULT 0,
             min_stock_level INTEGER DEFAULT 5,
@@ -113,6 +114,15 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        try:
+            cursor.execute("SELECT price FROM products LIMIT 1")
+            cursor.execute("ALTER TABLE products ADD COLUMN retail_price REAL DEFAULT 0")
+            cursor.execute("UPDATE products SET retail_price = price WHERE retail_price = 0")
+            cursor.execute("ALTER TABLE products ADD COLUMN wholesale_price REAL DEFAULT 0")
+            cursor.execute("UPDATE products SET wholesale_price = retail_price WHERE wholesale_price = 0")
+            logger.info("Migrated products table: price -> retail_price/wholesale_price")
+        except sqlite3.OperationalError:
+            pass  # Already has correct columns
 
         cursor.execute('''CREATE TABLE IF NOT EXISTS sales (
             id TEXT PRIMARY KEY,
@@ -129,6 +139,18 @@ def init_db():
             is_void INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        for col, col_type in [
+            ('sale_type', 'TEXT DEFAULT "retail"'),
+            ('credit_status', 'TEXT DEFAULT NULL'),
+            ('credit_customer_name', 'TEXT DEFAULT NULL'),
+            ('credit_customer_phone', 'TEXT DEFAULT NULL'),
+            ('credit_paid_amount', 'REAL DEFAULT 0'),
+            ('credit_paid_date', 'TIMESTAMP DEFAULT NULL'),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE sales ADD COLUMN {col} {col_type}")
+            except:
+                pass
 
         cursor.execute('''CREATE TABLE IF NOT EXISTS sale_items (
             id TEXT PRIMARY KEY,

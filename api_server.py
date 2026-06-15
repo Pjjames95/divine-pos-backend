@@ -514,10 +514,14 @@ def delete_product(product_id):
 def create_sale():
     data = request.json
     sale_id = str(uuid.uuid4())
-    receipt = f"GBS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    receipt = data.get('receipt_number') or f"GBS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     
     payment_method = data.get('payment_method', 'cash')
     payment_status = data.get('payment_status', 'completed')
+    sale_type = data.get('sale_type', 'retail')
+    
+    # Use provided created_at or current time
+    created_at = data.get('created_at', datetime.now().isoformat())
     
     # Handle credit sales
     credit_status = None
@@ -532,15 +536,14 @@ def create_sale():
     
     execute_query('''INSERT INTO sales (id, receipt_number, total_amount, payment_method, 
         payment_status, sale_type, credit_status, credit_customer_name, credit_customer_phone,
-        cash_tendered, change_amount, cashier_id, customer_phone)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        cash_tendered, change_amount, cashier_id, customer_phone, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (sale_id, receipt, data['total_amount'], payment_method, 
-         payment_status, data.get('sale_type', 'retail'),
+         payment_status, sale_type,
          credit_status, credit_customer_name, credit_customer_phone,
          data.get('cash_tendered'), data.get('change_amount'), 
-         data.get('cashier_id'), data.get('customer_phone')))
+         data.get('cashier_id'), data.get('customer_phone'), created_at))
     
-    # Only reduce stock if not credit (or if you want to reduce for credit too)
     for item in data.get('items', []):
         product = execute_query("SELECT cost_price FROM products WHERE id=?", 
             (item['product_id'],), fetch=True)
@@ -554,7 +557,6 @@ def create_sale():
             (str(uuid.uuid4()), sale_id, item['product_id'], item['product_name'],
              item['quantity'], item['unit_price'], item['total_price'], total_profit))
         
-        # Reduce stock for credit sales too
         execute_query("UPDATE products SET quantity=quantity-?, updated_at=? WHERE id=?", 
             (item['quantity'], datetime.now(), item['product_id']))
     

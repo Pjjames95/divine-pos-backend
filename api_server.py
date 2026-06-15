@@ -674,6 +674,30 @@ def get_settings():
     return jsonify({r['key']: r['value'] for r in rows})
 
 
+@app.route('/api/users/<user_id>', methods=['PUT'])
+def update_user(user_id):
+    """Update user details"""
+    data = request.json
+    
+    # Update basic info
+    execute_query('''UPDATE users SET full_name=?, role=?, phone=?
+        WHERE id=?''',
+        (data.get('full_name', ''), data.get('role', 'cashier'), 
+         data.get('phone', ''), user_id))
+    
+    # Update password if provided
+    if data.get('password'):
+        pw = bcrypt.hashpw(data['password'].encode(), bcrypt.gensalt())
+        execute_query("UPDATE users SET password_hash=? WHERE id=?", (pw, user_id))
+    
+    # Update PIN if provided
+    if data.get('pin'):
+        pin_hash = bcrypt.hashpw(data['pin'].encode(), bcrypt.gensalt())
+        execute_query("UPDATE users SET pin_hash=? WHERE id=?", (pin_hash, user_id))
+    
+    return jsonify({'success': True})
+
+
 @app.route('/api/settings', methods=['PUT'])
 def update_settings():
     for key, value in request.json.items():

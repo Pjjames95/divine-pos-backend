@@ -545,6 +545,7 @@ def create_sale():
          data.get('cashier_id'), data.get('customer_phone'), created_at))
     
     for item in data.get('items', []):
+        # Get product cost price for profit calculation
         product = execute_query("SELECT cost_price FROM products WHERE id=?", 
             (item['product_id'],), fetch=True)
         cost_price = float(product[0]['cost_price'] or 0) if product else 0
@@ -557,6 +558,7 @@ def create_sale():
             (str(uuid.uuid4()), sale_id, item['product_id'], item['product_name'],
              item['quantity'], item['unit_price'], item['total_price'], total_profit))
         
+        # Reduce stock
         execute_query("UPDATE products SET quantity=quantity-?, updated_at=? WHERE id=?", 
             (item['quantity'], datetime.now(), item['product_id']))
     
@@ -567,21 +569,45 @@ def create_sale():
 def get_sales():
     date = request.args.get('date')
     try:
-        if date:
-            sales_raw = execute_query(
-                "SELECT * FROM sales WHERE created_at BETWEEN ? AND ? AND is_void=0 ORDER BY created_at DESC",
-                (f"{date} 00:00:00", f"{date} 23:59:59"), fetch=True
-            )
-        else:
-            sales_raw = execute_query(
-                "SELECT * FROM sales WHERE is_void=0 ORDER BY created_at DESC LIMIT 200",
-                fetch=True
-            )
-        for sale in sales_raw:
-            sale['items'] = execute_query(
-                "SELECT * FROM sale_items WHERE sale_id=?", (sale['id'],), fetch=True
-            )
-        return jsonify(sales_raw)
+        with db_lock:
+            conn = sqlite3.connect(DATABASE_PATH)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            if date:
+                cursor.execute("SELECT * FROM sales WHERE created_at BETWEEN ? AND ? AND is_void=0 ORDER BY created_at DESC",
+                    (f"{date} 00:00:00", f"{date} 23:59:59"))
+            else:
+                cursor.execute("SELECT * FROM sales WHERE is_void=0 ORDER BY created_at DESC LIMIT 200")
+            
+            sales = []
+            for row in cursor.fetchall():
+                sale = dict(row)
+                
+                # Get cashier name from users table
+                if sale.get('cashier_id'):
+                    cursor.execute("SELECT full_name FROM users WHERE id=?", (sale['cashier_id'],))
+                    user = cursor.fetchone()
+                    sale['cashier'] = user['full_name'] if user else 'Unknown'
+                else:
+                    sale['cashier'] = 'N/A'
+                
+                # Get sale items
+                cursor.execute("SELECT * FROM sale_items WHERE sale_id=?", (sale['id'],))
+                items = []
+                for item in cursor.fetchall():
+                    item_dict = dict(item)
+                    # Get product cost price
+                    cursor.execute("SELECT cost_price FROM products WHERE id=?", 
+                        (item_dict.get('product_id', ''),))
+                    product = cursor.fetchone()
+                    item_dict['cost_price'] = product['cost_price'] if product else 0
+                    items.append(item_dict)
+                sale['items'] = items
+                sales.append(sale)
+            
+            conn.close()
+            return jsonify(sales)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     

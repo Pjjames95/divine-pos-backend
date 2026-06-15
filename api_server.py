@@ -588,6 +588,16 @@ def get_sales():
             for row in cursor.fetchall():
                 sale = dict(row)
                 
+                # Convert created_at to Kenya time (UTC+3)
+                if sale.get('created_at'):
+                    try:
+                        from datetime import timezone, timedelta
+                        utc_time = datetime.fromisoformat(str(sale['created_at']))
+                        eat_time = utc_time + timedelta(hours=3)
+                        sale['created_at'] = eat_time.isoformat()
+                    except:
+                        pass
+                
                 # Get cashier name from users table
                 if sale.get('cashier_id'):
                     cursor.execute("SELECT full_name FROM users WHERE id=?", (sale['cashier_id'],))
@@ -601,7 +611,6 @@ def get_sales():
                 items = []
                 for item in cursor.fetchall():
                     item_dict = dict(item)
-                    # Get product cost price for profit calculation
                     if item_dict.get('product_id'):
                         cursor.execute("SELECT cost_price FROM products WHERE id=?", 
                             (item_dict['product_id'],))

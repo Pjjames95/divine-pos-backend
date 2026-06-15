@@ -575,10 +575,14 @@ def get_sales():
             cursor = conn.cursor()
             
             if date:
-                cursor.execute("SELECT * FROM sales WHERE created_at BETWEEN ? AND ? AND is_void=0 ORDER BY created_at DESC",
-                    (f"{date} 00:00:00", f"{date} 23:59:59"))
+                cursor.execute(
+                    "SELECT * FROM sales WHERE created_at BETWEEN ? AND ? AND is_void=0 ORDER BY created_at DESC",
+                    (f"{date} 00:00:00", f"{date} 23:59:59")
+                )
             else:
-                cursor.execute("SELECT * FROM sales WHERE is_void=0 ORDER BY created_at DESC LIMIT 200")
+                cursor.execute(
+                    "SELECT * FROM sales WHERE is_void=0 ORDER BY created_at DESC LIMIT 200"
+                )
             
             sales = []
             for row in cursor.fetchall():
@@ -592,22 +596,26 @@ def get_sales():
                 else:
                     sale['cashier'] = 'N/A'
                 
-                # Get sale items
+                # Get sale items with cost prices
                 cursor.execute("SELECT * FROM sale_items WHERE sale_id=?", (sale['id'],))
                 items = []
                 for item in cursor.fetchall():
                     item_dict = dict(item)
-                    # Get product cost price
-                    cursor.execute("SELECT cost_price FROM products WHERE id=?", 
-                        (item_dict.get('product_id', ''),))
-                    product = cursor.fetchone()
-                    item_dict['cost_price'] = product['cost_price'] if product else 0
+                    # Get product cost price for profit calculation
+                    if item_dict.get('product_id'):
+                        cursor.execute("SELECT cost_price FROM products WHERE id=?", 
+                            (item_dict['product_id'],))
+                        product = cursor.fetchone()
+                        item_dict['cost_price'] = product['cost_price'] if product else 0
+                    else:
+                        item_dict['cost_price'] = 0
                     items.append(item_dict)
                 sale['items'] = items
                 sales.append(sale)
             
             conn.close()
             return jsonify(sales)
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     

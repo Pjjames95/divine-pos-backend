@@ -643,8 +643,14 @@ def get_users():
 @app.route('/api/users', methods=['POST'])
 def create_user():
     data = request.json
-    pw   = bcrypt.hashpw(data['password'].encode(), bcrypt.gensalt())
-    pin  = bcrypt.hashpw(data['pin'].encode(), bcrypt.gensalt()) if data.get('pin') else None
+    
+    # Validate required fields
+    if not data.get('password'):
+        return jsonify({'error': 'Password is required'}), 400
+    
+    pw = bcrypt.hashpw(data['password'].encode(), bcrypt.gensalt())
+    pin = bcrypt.hashpw(data['pin'].encode(), bcrypt.gensalt()) if data.get('pin') else None
+    
     execute_query(
         '''INSERT INTO users (id, username, password_hash, pin_hash, full_name, role, phone)
            VALUES (?, ?, ?, ?, ?, ?, ?)''',
@@ -679,19 +685,18 @@ def update_user(user_id):
     """Update user details"""
     data = request.json
     
-    # Update basic info
     execute_query('''UPDATE users SET full_name=?, role=?, phone=?
         WHERE id=?''',
         (data.get('full_name', ''), data.get('role', 'cashier'), 
          data.get('phone', ''), user_id))
     
-    # Update password if provided
-    if data.get('password'):
+    # Only update password if provided and not empty
+    if data.get('password') and len(data.get('password', '')) > 0:
         pw = bcrypt.hashpw(data['password'].encode(), bcrypt.gensalt())
         execute_query("UPDATE users SET password_hash=? WHERE id=?", (pw, user_id))
     
-    # Update PIN if provided
-    if data.get('pin'):
+    # Only update PIN if provided and not empty
+    if data.get('pin') and len(data.get('pin', '')) > 0:
         pin_hash = bcrypt.hashpw(data['pin'].encode(), bcrypt.gensalt())
         execute_query("UPDATE users SET pin_hash=? WHERE id=?", (pin_hash, user_id))
     
